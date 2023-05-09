@@ -1,0 +1,182 @@
+---
+title: "*Zosterops* pariwise FST table"
+format: html
+toc: true
+toc-title: Document Contents
+number-sections: true
+embed-resources: true
+---
+
+### Load libraries
+```{r, results='hide'}
+library(vcfR)
+library(SNPfiltR)
+library(ggplot2)
+library(adegenet)
+library(StAMPP)
+```
+
+### read in vcf and trim it
+```{r}
+### Filter input SNP files based on smaple inclusion and MAC to increase signal to noise ratio
+#read in filtered vcf
+vcfR <- read.vcfR("~/Desktop/cali.zosterops.rad/filtered.snps.vcf.gz")
+vcfR
+#bring in sample info
+#read in sample info csv
+sample.info<-read.csv("~/Desktop/cali.zosterops.rad/zosterops.trimmed.RAD.sampling.csv")
+sample.info<-sample.info[sample.info$ID %in% colnames(vcfR@gt),]
+table(sample.info$Species)
+#see sample order
+colnames(vcfR@gt)
+#make sure sample info DF order matches order of samples in vcf
+sample.info$ID == colnames(vcfR@gt)[-1]
+rownames(sample.info)<-c(1:nrow(sample.info))
+
+#remove the two putative hybrid samples from the vcf
+v.sub<-vcfR[,c(1:46,48:51,53:125)]
+
+#subset sample info
+sample.info<-sample.info[c(1:45,47:50,52:124),]
+```
+
+### convert vcfR to genlight and calc fst
+```{r}
+#convert
+gen<-vcfR2genlight(v.sub)
+
+#assign samples to the three groups shown above
+gen@pop<-as.factor(sample.info$Species)
+#calculate pairwise Fst using the stampp package
+di.heat<-stamppFst(gen)
+#extract the pairwise matrix
+m<-di.heat$Fsts
+#fill in upper triangle of the matrix
+m[upper.tri(m)] <- t(m)[upper.tri(m)]
+
+#melt to tidy format for ggplotting
+heat <- reshape::melt(m)
+```
+
+### plot results
+```{r}
+#plot as heatmap with exact values labeling each cell
+ggplot(data = heat, aes(x=X1, y=X2, fill=value)) + 
+  geom_tile()+
+  geom_text(data=heat,aes(label=round(value, 2)))+
+  theme_minimal()+
+  scale_fill_gradient2(low = "white", high = "red", space = "Lab", name="Fst") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        axis.text.y = element_text(angle = 45, hjust = 1))
+
+#ggsave("~/Desktop/cali.zosterops.rad/subset.heatmap.pdf", width = 4.5, height = 3, units= "in")
+```
+
+### try splitting up the three clades of japonicus to compare the intra to inter species FST's
+```{r}
+spec.assignments<-sample.info$Species
+spec.assignments[c(50:54,59:64,87:93)]<-"north.phil"
+spec.assignments[c(55:58,65:71,81:86,98,113,114)]<-"south.phil"
+#assign samples to the three groups shown above
+gen@pop<-as.factor(spec.assignments)
+#calculate pairwise Fst using the stampp package
+di.heat<-stamppFst(gen)
+#extract the pairwise matrix
+m<-di.heat$Fsts
+#fill in upper triangle of the matrix
+m[upper.tri(m)] <- t(m)[upper.tri(m)]
+
+#melt to tidy format for ggplotting
+heat <- reshape::melt(m)
+
+#plot as heatmap with exact values labeling each cell
+ggplot(data = heat, aes(x=X1, y=X2, fill=value)) + 
+  geom_tile()+
+  geom_text(data=heat,aes(label=round(value, 2)))+
+  theme_minimal()+
+  scale_fill_gradient2(low = "white", high = "red", space = "Lab", name="Fst") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        axis.text.y = element_text(angle = 45, hjust = 1))
+
+#ggsave("~/Desktop/cali.zosterops.rad/fst.heatmap.pdf", width = 5, height = 3, units= "in")
+```
+
+### add in fixed differences
+```{r}
+#identify the number of fixed differences between pops
+#convert vcf to genotype matrix
+mat<-extract.gt(v.sub)
+conv.mat<-mat
+conv.mat[conv.mat == "0/0"]<-0
+conv.mat[conv.mat == "0/1"]<-1
+conv.mat[conv.mat == "1/1"]<-2
+conv.mat<-as.data.frame(conv.mat)
+#convert to matrix numeric
+for (i in 1:ncol(conv.mat)){
+  conv.mat[,i]<-as.numeric(as.character(conv.mat[,i]))
+}
+
+#compare colnames of the matrix to your popmap to verify you're subsetting correctly
+colnames(conv.mat) == sample.info$ID #should be all true
+#make vector to fill with number of pairwise fixed diffs
+f<-c()
+
+#this generic for loop will calculate the number of fixed diffs between each of your designated pops
+for (i in 1:nrow(heat)){
+  #calc af of pop1 and pop2
+  pop1.af<-(rowSums(conv.mat[,spec.assignments == heat$X1[i]], na.rm=T)/(rowSums(is.na(conv.mat[,spec.assignments == heat$X1[i]]) == FALSE)))/2
+  pop2.af<-(rowSums(conv.mat[,spec.assignments == heat$X2[i]], na.rm=T)/(rowSums(is.na(conv.mat[,spec.assignments == heat$X2[i]]) == FALSE)))/2
+  #store number of fixed differences
+  f[i]<-sum(is.na(abs(pop1.af - pop2.af)) == FALSE & abs(pop1.af - pop2.af) == 1) #find fixed SNPs and add to vector
+}
+
+#make sure this worked correctly
+f
+#add number of fixed diffs to your existing df
+heat$fixed<-f
+
+### this code will get you the vector needed to combine FST values and fixed differences into a single vector split by 
+#define n as the number of taxa used in your pairwise Fst comparison
+n<-8 #here 3
+i<-1 #always begin incrementer (i) at 1
+x<-c() #always begin with an empty vector
+#while loop that will make the appropriate vector and store it in the variable 'x'
+while (i < n){
+  #the first set of numbers is simply 2:n
+  if(i == 1){
+    x<-c(2:n)
+    i=i+1
+  }
+  #the second set of numbers is (2+n+1):(2*n) which we add to the existing vector
+  if(i == 2){
+    x<-c(x,(2+n+1):(2*n))
+    i=i+1
+  }
+  
+    if(n == 3){break} #handle the edge case where n=3 and the code proceeds to the next step even though it is in violation of the outside while loop, because it tests all internal statements before looping back to the top to test the while loop condition
+  
+  #we then add (2+((i-1)*(n+1))):(i*n) to the vector, where i=3, incrememnt i by 1, and continue adding this vector to the growing vector until i = n-1
+  if(i > 2){
+    x<-c(x,(2+((i-1)*(n+1))):(i*n))
+    i=i+1
+  }
+}
+
+#order your Fst and fixed difference values correctly in a single mixed vector to plot the Fst values above and # of fixed differences below the diagonal in the heatmap, using the vector you just created (named 'x')
+heat$mixed<-heat$value
+heat$mixed[x]<-heat$fixed[x]
+
+#plot with labels
+ggplot(data = heat, aes(x=X1, y=X2, fill=value)) + 
+  geom_tile()+
+  geom_text(data=heat,aes(label=round(mixed, 2)), size=4)+
+  theme_minimal()+
+  scale_fill_gradient2(low = "white", high = "red", space = "Lab", name="Fst") +
+  theme(axis.text.x = element_text(angle = 45, vjust=.9, hjust = .9, size=12),
+        axis.text.y = element_text(angle = 45, hjust = 1, size=12),
+        axis.title.x = element_blank(), axis.title.y = element_blank())
+
+#ggsave
+#ggsave("~/Desktop/cali.zosterops.rad/fst.heatmap.pdf", width = 5, height = 4, units= "in")
+```
+
