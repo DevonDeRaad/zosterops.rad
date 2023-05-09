@@ -1,0 +1,47 @@
+---
+title: "*Zosterops* splitstree"
+format: html
+toc: true
+toc-title: Document Contents
+number-sections: true
+embed-resources: true
+bibliography: references.bib
+---
+
+## Read in filtered SNP data
+```{r}
+#| output: false
+library(vcfR) #v1.14.0
+library(ggplot2) #v3.4.1
+library(adegenet) #v2.1.10
+library(SNPfiltR) #v1.0.1
+library(StAMPP) #v1.6.3
+
+#read in vcf
+vcfR <- read.vcfR("~/Desktop/cali.zosterops.rad/filtered.snps.vcf.gz")
+```
+
+## Convert vcfR to genlight
+If needed, fix sample names to fit under 10 characters (a requirement of SplitsTree!)
+```{r}
+#convert each to genlight
+gen<-vcfR2genlight(vcfR)
+#assign populations (a StaMPP requirement)
+gen@pop<-as.factor(gen@ind.names)
+```
+
+## Calculate pairwise divergence and write out matrix
+```{r}
+#generate pairwise divergence matrix
+sample.div <- stamppNeisD(gen, pop = FALSE)
+#export for splitstree
+#stamppPhylip(distance.mat=sample.div, file="~/Desktop/cali.zosterops.rad/90.filtered.splits.txt")
+```
+Open the matrix in splitstree and visualize your results. Manipulate tip colors and clean up the visualization
+
+## Show the final product
+```{r}
+#visualize splitstree
+knitr::include_graphics(c("/Users/devder/Desktop/cali.zosterops.rad/phylogenetic.network.png"))
+```
+
