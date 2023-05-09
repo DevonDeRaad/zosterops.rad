@@ -1,0 +1,254 @@
+---
+title: "*Zosterops* triangle plots"
+format: html
+toc: true
+toc-title: Document Contents
+number-sections: true
+embed-resources: true
+---
+
+### Load libraries
+```{r, results='hide'}
+library(vcfR)
+library(SNPfiltR)
+library(ggplot2)
+library(adegenet)
+library(StAMPP)
+```
+
+### read in vcf and trim it
+```{r}
+### Filter input SNP files based on smaple inclusion and MAC to increase signal to noise ratio
+#read in filtered vcf
+vcfR <- read.vcfR("~/Desktop/cali.zosterops.rad/filtered.snps.vcf.gz")
+vcfR
+#bring in sample info
+#read in sample info csv
+sample.info<-read.csv("~/Desktop/cali.zosterops.rad/zosterops.trimmed.RAD.sampling.csv")
+sample.info<-sample.info[sample.info$ID %in% colnames(vcfR@gt),]
+table(sample.info$Species)
+#see sample order
+colnames(vcfR@gt)
+#make sure sample info DF order matches order of samples in vcf
+sample.info$ID == colnames(vcfR@gt)[-1]
+rownames(sample.info)<-c(1:nrow(sample.info))
+
+#make subset vcfs
+#subset out simplex and palpebrosus
+simp.pal<-vcfR[,c(TRUE,sample.info$Species == "palpebrosus" | sample.info$Species == "simplex")]
+colnames(simp.pal@gt)
+#remove the japonicus simplex hybrid
+simp.pal<-simp.pal[,c(1:6,8:29)]
+colnames(simp.pal@gt)
+#remove invariant sites
+simp.pal<-min_mac(simp.pal, min.mac = 1)
+simp.pal
+```
+subset out simplex and the northern japonicus clade
+```{r}
+#read in admixture results
+#setwd to admixture directory run on the cluster
+setwd("~/Desktop/cali.zosterops.rad/admixture/all.samps/")
+#read in input file in order to get list of input samples in order
+samps<-read.table("binary_fileset.fam")[,1]
+#reorder sampling df to match order of the plot
+sample.info<-sample.info[match(samps, sample.info$ID),]
+sample.info$ID == samps
+#read in all ten runs and save each dataframe in a list
+runs<-list()
+#read in log files
+for (i in 1:10){
+  runs[[i]]<-read.table(paste0("binary_fileset.", i, ".Q"))
+}
+
+
+#subset out simplex and northern japonicus clade
+simp.japon<-vcfR[,c(TRUE,sample.info$Species == "simplex" | runs[[6]]$V5 > .9)]
+colnames(simp.japon@gt)
+
+#remove the palpebrosus simplex hybrid
+simp.japon<-simp.japon[,c(1:51,53:70)]
+colnames(simp.japon@gt)
+#remove invariant sites
+simp.japon<-min_mac(simp.japon, min.mac = 1)
+simp.japon
+```
+
+### make triangle plot for simplex vs palpebrosus
+```{r}
+#create genotype matrix
+mat<-extract.gt(simp.pal)
+#convert matrix to numeric values
+conv.mat<-mat
+conv.mat[conv.mat == "0/0"]<-0
+conv.mat[conv.mat == "0/1"]<-1
+conv.mat[conv.mat == "1/0"]<-1
+conv.mat[conv.mat == "1/1"]<-2
+#check that all genotypes were converted to numeric
+table(conv.mat)
+#convert matrix to dataframe
+conv.mat<-as.data.frame(conv.mat)
+#convert class of each genotype to numeric
+for (i in 1:ncol(conv.mat)){
+  conv.mat[,i]<-as.numeric(as.character(conv.mat[,i]))
+}
+#check sample order
+colnames(conv.mat)
+
+#calc AF for the samples you will use to call fixed differences
+palp.af<-(rowSums(conv.mat[,c(13:16)], na.rm=T)/(rowSums(is.na(conv.mat[,c(13:16)]) == FALSE)))/2
+sim.af<-(rowSums(conv.mat[,c(1:9,11,12,17:27)], na.rm=T)/(rowSums(is.na(conv.mat[,c(1:9,11,12,17:27)]) == FALSE)))/2
+
+#find fixed SNPs
+diff<-abs(palp.af - sim.af)
+#how many SNPs are fixed
+table(is.na(diff) == FALSE & diff == 1)
+#subsample original matrix to only fixed diff SNPs
+gen.mat<-mat[is.na(diff) == FALSE & diff == 1,]
+dim(gen.mat)
+#subsample matrix converted for AF calcs to only fixed SNPS
+conv.mat<-conv.mat[is.na(diff) == FALSE & diff == 1,]
+dim(conv.mat)
+conv.mat<-as.matrix(conv.mat)
+table(conv.mat)
+
+#write a logical test to convert alleles so that a single number represents one parental ancestry
+for (i in 1:nrow(conv.mat)){
+  #if 1 is the simp allele (ie = 0 frequency in the simplex samples used for identifying informative SNPs)
+  if((sum(conv.mat[i,c(13:16)], na.rm=T)/(sum(is.na(conv.mat[i,c(13:16)]) == FALSE)))/2 == 0){
+    #swap all '0' cells with '3'
+    conv.mat[i,][conv.mat[i,] == 0]<-3
+    #swap all 2 cells with 0
+    conv.mat[i,][conv.mat[i,] == 2]<-0
+    #finally convert all 3 cells (originally 0) into 2
+    conv.mat[i,][conv.mat[i,] == 3]<-2
+    #no need to touch hets
+  }
+}
+
+#subset to alleles with < 10 missing genotypes
+test<-conv.mat[rowSums(is.na(conv.mat)) < 1,]
+dim(test)
+
+#convert R class NAs to the string "NA/NA"
+#gen.mat[is.na(gen.mat) == TRUE]<-"NA/NA"
+
+#check out the df
+head(conv.mat)[,c(1:10)]
+
+#calc proportion palpebrosus ancestry
+palp.anc<-c()
+for (i in 1:ncol(conv.mat)){palp.anc[i]<-sum(conv.mat[,i], na.rm = T)/(sum(!is.na(conv.mat[,i]))*2)}
+
+#calc proportion interspecific heterozygosity
+het<-c()
+for (i in 1:ncol(conv.mat)){het[i]<-sum(conv.mat[,i] == 1, na.rm = T)/(sum(!is.na(conv.mat[,i])))}
+
+#plot the triangle plot
+#plot colored by song type
+plot(x=palp.anc, y=het, bg="white",
+     pch=21, cex=1.5,
+     xlab="Ancestry", ylab="Interspecific heterozygosity",
+     ylim=c(0,1))
+segments(x0 =0, y0 =0, x1 =.5, y1 =1)
+segments(x0 =1, y0 =0, x1 =.5, y1 =1)
+#save plot
+#pdf("~/Desktop/cali.zosterops.rad/sim.palp.tri.pdf", width=4.4, height=4)
+#plot(x=palp.anc, y=het, bg="white",
+#     pch=21, cex=1.5,
+#     xlab="Ancestry", ylab="Interspecific heterozygosity",
+#     ylim=c(0,1))
+#segments(x0 =0, y0 =0, x1 =.5, y1 =1)
+#segments(x0 =1, y0 =0, x1 =.5, y1 =1)
+#dev.off()
+```
+
+### make triangle plot for simplex vs japonicus
+```{r}
+#create genotype matrix
+mat<-extract.gt(simp.japon)
+#convert matrix to numeric values
+conv.mat<-mat
+conv.mat[conv.mat == "0/0"]<-0
+conv.mat[conv.mat == "0/1"]<-1
+conv.mat[conv.mat == "1/0"]<-1
+conv.mat[conv.mat == "1/1"]<-2
+#check that all genotypes were converted to numeric
+table(conv.mat)
+#convert matrix to dataframe
+conv.mat<-as.data.frame(conv.mat)
+#convert class of each genotype to numeric
+for (i in 1:ncol(conv.mat)){
+  conv.mat[,i]<-as.numeric(as.character(conv.mat[,i]))
+}
+#check sample order
+colnames(conv.mat)
+
+#calc AF for the samples you will use to call fixed differences
+japon.af<-(rowSums(conv.mat[,c(1:40,64:68)], na.rm=T)/(rowSums(is.na(conv.mat[,c(1:40,64:68)]) == FALSE)))/2
+sim.af<-(rowSums(conv.mat[,c(41:45,47:63)], na.rm=T)/(rowSums(is.na(conv.mat[,c(41:45,47:63)]) == FALSE)))/2
+
+#find fixed SNPs
+diff<-abs(japon.af - sim.af)
+#how many SNPs are fixed
+table(is.na(diff) == FALSE & diff == 1)
+#subsample original matrix to only fixed diff SNPs
+gen.mat<-mat[is.na(diff) == FALSE & diff == 1,]
+dim(gen.mat)
+#subsample matrix converted for AF calcs to only fixed SNPS
+conv.mat<-conv.mat[is.na(diff) == FALSE & diff == 1,]
+dim(conv.mat)
+conv.mat<-as.matrix(conv.mat)
+table(conv.mat)
+
+#write a logical test to convert alleles so that a single number represents one parental ancestry
+for (i in 1:nrow(conv.mat)){
+  #if 1 is the simp allele (ie = 0 frequency in the simplex samples used for identifying informative SNPs)
+  if((sum(conv.mat[i,c(1:40,64:68)], na.rm=T)/(sum(is.na(conv.mat[i,c(1:40,64:68)]) == FALSE)))/2 == 0){
+    #swap all '0' cells with '3'
+    conv.mat[i,][conv.mat[i,] == 0]<-3
+    #swap all 2 cells with 0
+    conv.mat[i,][conv.mat[i,] == 2]<-0
+    #finally convert all 3 cells (originally 0) into 2
+    conv.mat[i,][conv.mat[i,] == 3]<-2
+    #no need to touch hets
+  }
+}
+
+#subset to alleles with < 10 missing genotypes
+test<-conv.mat[rowSums(is.na(conv.mat)) < 1,]
+dim(test)
+
+#convert R class NAs to the string "NA/NA"
+#gen.mat[is.na(gen.mat) == TRUE]<-"NA/NA"
+
+#check out the df
+head(conv.mat)[,c(1:10)]
+
+#calc proportion japonicus ancestry
+japon.anc<-c()
+for (i in 1:ncol(conv.mat)){japon.anc[i]<-sum(conv.mat[,i], na.rm = T)/(sum(!is.na(conv.mat[,i]))*2)}
+
+#calc proportion interspecific heterozygosity
+het<-c()
+for (i in 1:ncol(conv.mat)){het[i]<-sum(conv.mat[,i] == 1, na.rm = T)/(sum(!is.na(conv.mat[,i])))}
+
+#plot the triangle plot
+#plot colored by song type
+plot(x=japon.anc, y=het, bg="white",
+     pch=21, cex=1.5,
+     xlab="Ancestry", ylab="Interspecific heterozygosity",
+     ylim=c(0,1))
+segments(x0 =0, y0 =0, x1 =.5, y1 =1)
+segments(x0 =1, y0 =0, x1 =.5, y1 =1)
+#save plot
+#pdf("~/Desktop/cali.zosterops.rad/sim.japon.tri.pdf", width=4.4, height=4)
+#plot(x=japon.anc, y=het, bg="white",
+#     pch=21, cex=1.5,
+#     xlab="Ancestry", ylab="Interspecific heterozygosity",
+#     ylim=c(0,1))
+#segments(x0 =0, y0 =0, x1 =.5, y1 =1)
+#segments(x0 =1, y0 =0, x1 =.5, y1 =1)
+#dev.off()
+```
+
