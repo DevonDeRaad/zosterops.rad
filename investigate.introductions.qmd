@@ -1,0 +1,407 @@
+---
+title: "Investigating introduced *Zosterops* populations"
+format: html
+toc: true
+toc-title: Document Contents
+number-sections: true
+embed-resources: true
+---
+
+### Load libraries
+```{r, results='hide'}
+library(vcfR) #v1.14.0
+library(ggplot2) #v3.4.1
+library(maps) #v3.4.1
+library(sf) #v1.0-12
+library(RColorBrewer) #v1.1-3
+library(ggrepel)
+library(SNPfiltR)
+library(adegenet)
+```
+
+### Read in vcf
+```{r}
+### Filter input SNP files based on smaple inclusion and MAC to increase signal to noise ratio
+#read in filtered vcf
+vcfR <- read.vcfR("~/Desktop/cali.zosterops.rad/filtered.snps.vcf.gz")
+vcfR
+#bring in sample info
+#read in sample info csv
+sample.info<-read.csv("~/Desktop/cali.zosterops.rad/zosterops.trimmed.RAD.sampling.csv")
+sample.info<-sample.info[sample.info$ID %in% colnames(vcfR@gt),]
+table(sample.info$Species)
+#see sample order
+colnames(vcfR@gt)
+#make sure sample info DF order matches order of samples in vcf
+sample.info$ID == colnames(vcfR@gt)[-1]
+rownames(sample.info)<-c(1:nrow(sample.info))
+```
+
+### Subset out simplex and the northern japonicus clades
+```{r}
+#read in admixture results
+#setwd to admixture directory run on the cluster
+setwd("~/Desktop/cali.zosterops.rad/admixture/all.samps/")
+#read in input file in order to get list of input samples in order
+samps<-read.table("binary_fileset.fam")[,1]
+#reorder sampling df to match order of the plot
+sample.info<-sample.info[match(samps, sample.info$ID),]
+sample.info$ID == samps
+#read in all ten runs and save each dataframe in a list
+runs<-list()
+#read in log files
+for (i in 1:10){
+  runs[[i]]<-read.table(paste0("binary_fileset.", i, ".Q"))
+}
+
+#subset out northern japonicus clade
+japon<-vcfR[,c(TRUE,runs[[6]]$V5 > .95)]
+colnames(japon@gt)
+#remove invariant sites
+japon<-min_mac(japon, min.mac = 1)
+japon
+
+#subset out simplex clade
+simp<-vcfR[,c(TRUE,runs[[6]]$V4 > .95)]
+colnames(simp@gt)
+#remove invariant sites
+simp<-min_mac(simp, min.mac = 1)
+simp
+```
+
+### Subset sampling file to make list of sampling locations for each group
+```{r}
+#isolate each clade
+j.samps<-sample.info[sample.info$ID %in% colnames(japon@gt),]
+s.samps<-sample.info[sample.info$ID %in% colnames(simp@gt),]
+
+#make a dataframe with number of samples per locality for each
+j.sample.locs<-j.samps %>% dplyr::group_by(lat, long) %>% dplyr::summarize(count=dplyr::n())
+s.sample.locs<-s.samps %>% dplyr::group_by(lat, long) %>% dplyr::summarize(count=dplyr::n())
+
+#number individual localities
+s.sample.locs$loc<-13:1
+j.sample.locs$loc<-c(1,22:2)
+```
+
+### make maps
+```{r}
+#make map
+pac<-map_data("world")
+
+#plot just simplex
+ggplot()+
+  geom_polygon(data = pac, aes(x=long, y = lat, group = group), fill="lightgrey", col="black", cex=.1)+
+  coord_sf(xlim = c(95, 135), ylim = c(-2, 32))+
+  geom_text(hjust=0, vjust=0)+ 
+  geom_point(data = s.sample.locs, aes(x = long, y = lat), cex=2, pch=21, fill="#88CCEE", alpha =1, show.legend=TRUE) +
+  geom_label_repel(data = s.sample.locs[c(1:12),], 
+                  aes(x = long, y = lat, label = loc),
+                  box.padding   = .5, 
+                  point.padding = 0,
+                  segment.color = 'black', max.overlaps = 45) +
+  theme_classic()+
+  theme(legend.position = NULL)
+
+#save
+#ggsave("~/Desktop/cali.zosterops.rad/simp.map.pdf", width = 5, height = 4, units= "in")
+
+#plot LA samples
+ggplot()+
+  geom_polygon(data = pac, aes(x=long, y = lat, group = group), fill="lightgrey", col="black", cex=.1)+
+  coord_sf(xlim = c(-121, -113), ylim = c(31, 36)) + 
+  geom_text(hjust=0, vjust=0)+ 
+  geom_point(data = s.sample.locs, aes(x = long, y = lat), cex=2, pch=21, fill="black", alpha =1, show.legend=TRUE) +
+  geom_label_repel(data = s.sample.locs[13,], 
+                  aes(x = long, y = lat, label = loc),
+                  box.padding   = .5, 
+                  point.padding = 0,
+                  segment.color = 'black', max.overlaps = 45) +
+  theme_classic()+
+  theme(legend.position = NULL)
+
+#save
+#ggsave("~/Desktop/cali.zosterops.rad/LA.map.pdf", width = 3, height = 2, units= "in")
+
+#plot just japonicus
+ggplot()+
+  geom_polygon(data = pac, aes(x=long, y = lat, group = group), fill="lightgrey", col="black", cex=.1)+
+  coord_sf(xlim = c(118, 153), ylim = c(18, 48))+
+  geom_text(hjust=0, vjust=0)+ 
+  geom_point(data = j.sample.locs, aes(x = long, y = lat), cex=2,pch=21, fill="#CC6677", alpha =1, show.legend=TRUE) +
+  geom_label_repel(data = j.sample.locs[c(2:22),], 
+                  aes(x = long, y = lat, label = loc),
+                  box.padding   = .5, 
+                  point.padding = 0,
+                  segment.color = 'black', max.overlaps = 45, force=15, force_pull = 10) +
+  theme_classic()+
+  theme(legend.position = NULL)
+
+#save
+#ggsave("~/Desktop/cali.zosterops.rad/japon.map.pdf", width = 5, height = 4, units= "in")
+
+#plot just Hawaii
+ggplot()+
+  geom_polygon(data = pac, aes(x=long, y = lat, group = group), fill="lightgrey", col="black", cex=.1)+
+  coord_sf(xlim = c(-160, -155), ylim = c(18, 23)) + 
+  geom_text(hjust=0, vjust=0)+ 
+  geom_point(data = j.sample.locs, aes(x = long, y = lat), pch=21, cex=2, fill="white", alpha =1, show.legend=TRUE) +
+  geom_label_repel(data = j.sample.locs[1,], 
+                  aes(x = long, y = lat, label = loc),
+                  box.padding   = .5, 
+                  point.padding = 0,
+                  segment.color = 'black', max.overlaps = 45) +
+  theme_classic()+
+  theme(legend.position = NULL)
+#save
+#ggsave("~/Desktop/cali.zosterops.rad/HI.map.pdf", width = 3, height = 2, units= "in")
+```
+
+### Make PCA for japonicus
+```{r}
+#convert vcfR to genlight
+gen<-vcfR2genlight(japon)
+#perform PCA
+j.pca<-glPca(gen, nf=6)
+#isolate PCA scores as a dataframe
+j.pca.scores<-as.data.frame(j.pca$scores)
+#make sure your sample info file is identical in order to the resulting PCA output
+rownames(j.pca.scores) == j.samps$ID #all should return true
+
+#use loop to assign the correct sample locality to each individual sample
+loc<-c()
+for (i in 1:nrow(j.samps)){
+  loc[i]<-j.sample.locs$loc[paste(j.sample.locs$lat,j.sample.locs$long) == paste(j.samps$lat[i],j.samps$long[i])]
+}
+
+#add in the relevant population identifier you would like to color-code by
+j.pca.scores$loc<-loc
+  
+#porportion of variance explained by PC1
+j.pca[["eig"]][1]/sum(j.pca[["eig"]])
+
+#porportion of variance explained by PC2
+j.pca[["eig"]][2]/sum(j.pca[["eig"]])
+
+#ggplot PCA colored by your identifier
+ggplot(j.pca.scores, aes(x=PC1, y=PC2)) +
+  geom_point(aes(fill=c(rep('native', times=40),rep('introduced',times=5))), pch=21, cex = 2)+
+  scale_fill_manual(values=c("white", "#CC6677"))+
+  xlab("PC1, 9.5% variance explained")+
+  ylab("PC2, 6.2% variance explained")+
+  geom_label_repel(data = j.pca.scores,
+                  aes(x = PC1, y = PC2, label = loc),
+                  box.padding   = .5,
+                  point.padding = 0,
+                  segment.color = 'black', max.overlaps = 45) +
+  theme_classic()+
+    theme(legend.position = "none")
+#ggsave("~/Desktop/cali.zosterops.rad/japon.pca.pdf", width = 5, height = 4, units= "in")
+```
+
+### Make PCA for simplex
+```{r}
+#convert vcfR to genlight
+gen<-vcfR2genlight(simp)
+#perform PCA
+s.pca<-glPca(gen, nf=6)
+#isolate PCA scores as a dataframe
+s.pca.scores<-as.data.frame(s.pca$scores)
+#make sure your sample info file is identical in order to the resulting PCA output
+rownames(s.pca.scores) == s.samps$ID #all should return true
+
+#use loop to assign the correct sample locality to each individual sample
+loc<-c()
+for (i in 1:nrow(s.samps)){
+  loc[i]<-s.sample.locs$loc[paste(s.sample.locs$lat,s.sample.locs$long) == paste(s.samps$lat[i],s.samps$long[i])]
+}
+
+#add in the relevant population identifier you would like to color-code by
+s.pca.scores$loc<-loc
+  
+#porportion of variance explained by PC1
+s.pca[["eig"]][1]/sum(s.pca[["eig"]])
+
+#porportion of variance explained by PC2
+s.pca[["eig"]][2]/sum(s.pca[["eig"]])
+
+#ggplot PCA colored by your identifier
+ggplot(s.pca.scores, aes(x=PC1, y=PC2)) +
+  geom_point(aes(fill=c(rep('native', times=12),rep('introduced',times=3),rep('native',times=7))), pch=21, cex = 2)+
+  scale_fill_manual(values=c("black", "#88CCEE"))+
+  xlab("PC1, 9.8% variance explained")+
+  ylab("PC2, 8.2% variance explained")+
+  geom_label_repel(data = s.pca.scores,
+                  aes(x = PC1, y = PC2, label = loc),
+                  box.padding   = .5,
+                  point.padding = 0,
+                  segment.color = 'black', max.overlaps = 45) +
+  theme_classic()+
+    theme(legend.position = "none")
+#save
+#ggsave("~/Desktop/cali.zosterops.rad/simp.pca.pdf", width = 5, height = 4, units= "in")
+```
+
+### write out popmap for calculating diversity metrics 'per sampling locality' using Stacks
+```{r}
+#make dataframe containing 1 row per sample, with associated locality number and species specified
+df<-cbind(rownames(s.pca.scores),paste0("s",s.pca.scores$loc))
+dfdf<-rbind(df,cbind(rownames(j.pca.scores),paste0("j",j.pca.scores$loc)))
+#write it to a tab separated text file
+#write.table(dfdf, file = "~/Desktop/cali.zosterops.rad/locs.popmap.txt", sep = "\t", row.names = F, col.names = F, quote = F)
+```
+
+### Calculate diversity metrics using Stacks
+```{bash, eval=FALSE}
+#run this in your working directory on the cluster, where locs.popmap.txt assigns samples to localities, to get locality level pi estimates
+#singlesample.popmap.txt assigns each sample as a unique population to get per individual heterozygosity estimates
+mkdir singlesample
+mkdir locs
+
+########### submit this as a bash script:
+#!/bin/sh
+#
+#SBATCH --job-name=zost.populations               # Job Name
+#SBATCH --nodes=1             # 40 nodes
+#SBATCH --ntasks-per-node=1               # 40 CPU allocation per Task
+#SBATCH --partition=bi            # Name of the Slurm partition used
+#SBATCH --chdir=/home/d669d153/work/zosterops.rad  # Set working d$
+#SBATCH --mem-per-cpu=100gb            # memory requested
+#SBATCH --time=1000
+#Run populations and export population info
+/home/d669d153/work/stacks-2.41/populations -P ./fastq -M locs.popmap.txt -O /home/d669d153/work/zosterops.rad/locs
+#Run populations and export population info
+/home/d669d153/work/stacks-2.41/populations -P ./fastq -M singlesample.popmap.txt -O /home/d669d153/work/zosterops.rad/singlesample
+```
+
+### Plot the diversity metrics from Stacks
+```{r}
+#read in each output file
+#pops
+pi.pops<-read.table("~/Desktop/cali.zosterops.rad/locs.populations.sumstats_summary.tsv", header=T, sep='\t')
+#per sample
+pi.sample<-read.table("~/Desktop/cali.zosterops.rad/singlesample.populations.sumstats_summary.tsv", header=T, sep='\t')
+
+pop<-as.data.frame(dfdf)
+colnames(pop)<-c("id","pop")
+#assign samples to pops
+pi.sample$Pop.ID == pop$id
+pi.sample$pop<-pop$pop
+plotting.df<-data.frame(sample=pi.sample$Pop.ID,
+                        species=pop$pop,
+                        het=pi.sample$Obs_Het)
+
+#add in pi
+pi.vec<-c()
+for (i in 1:nrow(plotting.df)){
+  pi.vec[i]<-pi.pops$Pi[pi.pops$Pop.ID == plotting.df$species[i]]
+}
+plotting.df$pi<-pi.vec
+
+#add in Fis
+fis.vec<-c()
+for (i in 1:nrow(plotting.df)){
+  fis.vec[i]<-pi.pops$Fis[pi.pops$Pop.ID == plotting.df$species[i]]
+}
+plotting.df$fis<-fis.vec
+
+#add in private alleles
+priv.vec<-c()
+for (i in 1:nrow(plotting.df)){
+  priv.vec[i]<-pi.pops$Private[pi.pops$Pop.ID == plotting.df$species[i]]
+}
+plotting.df$priv<-priv.vec
+
+
+#split the dataframe between simplex and japonicus
+s.df<-plotting.df[1:22,]
+s.df<-droplevels(s.df)
+
+#rename pops
+s.df$species<-gsub("s","",s.df$species)
+
+level_order<-c(1:13)
+options(scipen = 999) #turn off scientific notation on axis labels
+#plot heterozygosity violin plots
+ggplot(s.df, aes(x=factor(species, level = level_order), y=het)) + 
+  #geom_violin(trim = FALSE)+
+  geom_dotplot(binaxis='y', stackdir='center', dotsize = 1.5, alpha=1, fill="#88CCEE")+
+  theme_classic()+
+  scale_x_discrete(labels=c(1:13))+
+    theme(axis.text.x = element_text(angle = 45, hjust = 1,size=9, color="black"),
+        axis.text.y = element_text(angle = 45, hjust = 1, size = 9),
+        legend.position = "none")+
+  geom_point(s.df, mapping=aes(x=species, y=pi), pch=8, cex=2)+
+  labs(x="",y="heterozygosity / Pi")
+  #scale_y_continuous(sec.axis = sec_axis(trans = (~.*1), name="Pi"))
+#save
+#ggsave("~/Desktop/cali.zosterops.rad/simp.diversity.pdf", width = 4.5, height = 2, units= "in")
+
+#split the dataframe between simplex and japonicus
+j.df<-plotting.df[23:67,]
+j.df<-droplevels(j.df)
+
+level_order <- c(1:22) 
+#rename pops
+j.df$species<-gsub("j","",j.df$species)
+
+#plot heterozygosity violin plots
+ggplot(j.df, aes(x=factor(species, level = level_order), y=het)) + 
+  #geom_violin(trim = FALSE)+
+  geom_dotplot(binaxis='y', stackdir='center', dotsize = 1.5, alpha=1, fill="#CC6677")+
+  theme_classic()+
+  #scale_x_discrete(labels=c(1:22))+
+    theme(axis.text.x = element_text(angle = 45, hjust = 1,size=9, color="black"),
+        axis.text.y = element_text(angle = 45, hjust = 1, size = 9),
+        legend.position = "none")+
+  geom_point(j.df, mapping=aes(x=species, y=pi), pch=8, cex=2)+
+  labs(x="",y="heterozygosity / Pi")
+  #scale_y_continuous(sec.axis = sec_axis(trans = (~.*1), name="Pi"))
+#save
+#ggsave("~/Desktop/cali.zosterops.rad/japon.diversity.pdf", width = 4.5, height = 2, units= "in")
+```
+
+### Plot the number of private alleles in each sampling loc
+```{r}
+#isolate simplex
+s.pops<-pi.pops[1:13,]
+s.pops<-droplevels(s.pops)
+
+#rename pops
+s.pops$Pop.ID<-gsub("s","",s.pops$Pop.ID)
+
+level_order<-c(1:13)
+#plot private SNPs barchart
+ggplot(s.pops, aes(x=factor(Pop.ID, level = level_order), y=Private)) + 
+  geom_bar(stat ="identity", color="black", fill="#88CCEE")+
+  theme_classic()+
+  #scale_x_discrete(labels=c(1:13))+
+    theme(axis.text.x = element_text(angle = 45, hjust = 1,size=9, color="black"),
+        axis.text.y = element_text(angle = 45, hjust = 1, size = 9),
+        legend.position = "none")+
+  labs(x="",y="private alleles")
+#save
+#ggsave("~/Desktop/cali.zosterops.rad/simp.priv.pdf", width = 4.5, height = 2, units= "in")
+
+#isolate japonicus
+j.pops<-pi.pops[14:35,]
+j.pops<-droplevels(j.pops)
+
+#rename pops
+j.pops$Pop.ID<-gsub("j","",j.pops$Pop.ID)
+
+level_order<-c(1:22)
+#plot private SNPs barchart
+ggplot(j.pops, aes(x=factor(Pop.ID, level = level_order), y=Private)) + 
+  geom_bar(stat ="identity", color="black", fill="#CC6677")+
+  theme_classic()+
+  #scale_x_discrete(labels=c(1:13))+
+    theme(axis.text.x = element_text(angle = 45, hjust = 1,size=9, color="black"),
+        axis.text.y = element_text(angle = 45, hjust = 1, size = 9),
+        legend.position = "none")+
+  labs(x="",y="private alleles")
+#save
+#ggsave("~/Desktop/cali.zosterops.rad/japon.priv.pdf", width = 4.5, height = 2, units= "in")
+
+```
+
