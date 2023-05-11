@@ -30,7 +30,7 @@
 
 ### Investigate introduced pop ancestry and diversity
 *   The process of investigating the ancestry and genetic diversity of introduced pops is viewable here:
-    > <https://devonderaad.github.io/zosterops.rad/invesigate.introductions.html>
+    > <https://devonderaad.github.io/zosterops.rad/investigate.introductions.html>
 
 ## Ecological niche modeling analyses
 
