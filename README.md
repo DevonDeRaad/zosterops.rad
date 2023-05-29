@@ -33,5 +33,5 @@
     > <https://devonderaad.github.io/zosterops.rad/investigate.introductions.html>
 
 ## Ecological niche modeling analyses
-
-To come
+*   Quantifying the ecological niche of the native distribution of *Z. simplex* and projecting across North America can be viewed here:
+    > <https://devonderaad.github.io/zosterops.rad/zosterops_ENM.html>
