@@ -1,0 +1,494 @@
+---
+title: "Ecological niche modeling for *Zosterops simplex*"
+format: html
+editor: visual
+toc: true
+toc-title: Document Contents
+number-sections: true
+embed-resources: true
+---
+
+<br>
+
+### Description
+
+This document contains code and comments to reproduce analyses for ecological niche modeling of *Zosterops simplex*. Due to the time and complications involved in running the entire process at once, this document does not show the outputs of the code used, but it has been revised to allow full reproducibility.
+
+*Note: A connection to internet is required to run the code successfully. New sub-directories and files will be written in your working directory.*
+
+<br>
+
+### Libraries
+
+The R packages [grinnell](https://github.com/fmachados/grinnell), [moransfast](https://github.com/mcooper/moranfast/tree/master), [kuenm](https://github.com/marlonecobos/kuenm), and [mop](https://github.com/marlonecobos/mop) are only on GitHub and some of them need compilation, install them using the package `remotes` and follow specific instructions if needed.
+
+```{r, eval=FALSE}
+library(terra)
+library(geodata)
+library(spThin)
+library(moranfast) 
+library(grinnell)
+library(kuenm)
+library(mop)
+```
+
+<br>
+
+### Data
+
+Our data consists of occurrence records of *Z. simplex* downloaded from [GBIF](https://www.gbif.org/), and raster layers obtained from the [MERRAClim database](https://datadryad.org/stash/dataset/doi:10.5061/dryad.s2v81). Raster layers used were the ones corresponding to the group "5m_mean_00s" (zipped folder with GTiff files).
+
+#### Manual processing of occurrence data
+
+Occurrence records were obtained manually from GBIF and stored in our working directory inside the sub-directory "Data". Records were processed manually to filter out erroneous or uncertain data. The steps followed are listed below:
+
+-   Read into QGIS the initial records (**280045**).
+-   Consulting Avibase, removed 1 record under the name *Zosterops simplex salvadorii* A.B.Meyer & Wiglesworth, 1894, as this taxon is generally considered as a full species, *Z. salvadorii*.
+-   Removed 18620 records from USA.
+-   Removed records with no geographic coordinates, leaving 261430 records.
+-   Removed 80 occurrences with coordinate uncertainty \> 10000 m.
+-   Removed 17215 records with year before 2000 (**243902** remaining records)
+-   Checked range, via descriptions in Avibase
+    -   Geographic range:
+        -   *Zosterops simplex simplex*: breeds in eastern China (from extreme southern Gansu east to Jiangsu, south to eastern Yunnan, Guangxi, Guangdong and Fujian), Taiwan, and northeastern Vietnam; northern populations migratory, wintering from southeastern China to Thailand and central Indochina
+        -   *Zosterops simplex hainanus*: Hainan (s China)
+        -   *Zosterops simplex williamsoni*: southern Thailand and east coast of northern and central Thai-Malay Peninsula
+        -   *Zosterops simplex erwini*: coastal forests of the western and southeastern Thai-Malay Peninsula, of Sumatra, the Riau Islands, Bangka, and the Natuna Islands; population of coastal western Borneo provisionally assigned here, but possibly a distinct taxon
+    -   Source: Clements checklist
+-   Checked range further via consulting northern/eastern limit in [BirdLife](http://datazone.birdlife.org/species/factsheet/swinhoes-white-eye-zosterops-simplex/distribution)
+    -   Removed a bunch of NE China records considering this source.
+-   Removed 2 more records, which were from Baja California!
+-   Checked for coincidence with MERRAClim dataset. MERRA is not clipped to coasts, so we used the China_ADM coverage from DivaGIS. Removed 20643 records that are "offshore."
+-   The total remaining records (**222673**) were saved in CSV format.
+
+#### Reading occurrence data and further filtering
+
+```{r, eval=FALSE}
+# clean data
+occ <- read.csv("Data/Z_simplex_clean.csv")
+
+# kepp only species, longitude, and latitude
+colnames(occ)
+
+occ <- occ[, c("species", "decimalLon", "decimalLat")]
+
+# rename columns
+colnames(occ) <- c("Species", "Longitude", "Latitude")
+
+# remove duplicates
+occ <- unique(occ)
+
+# save data
+write.csv(occ, "Data/Z_simplex_clean_nodup.csv", row.names = FALSE)
+```
+
+#### Reading raster layers and initial selection
+
+```{r, eval=FALSE}
+# variable
+var <- rast(list.files("Data/5m_mean_00s", pattern = ".tif$", full.names = T))
+
+# exclude the ones that combine information and sort them
+names(var)
+
+var <- var[[c(1, 12:17, 2:9)]]
+
+# renaming
+names(var) <- paste0("BIO", c(1:7, 10:17))
+```
+
+<br>
+
+### Spatial thinning
+
+To reduce biases from spatial autocorrelation, we spatially rarefied the records. Various distances for thinning records were used to understand their effects on our data.
+
+#### Thinning
+
+```{r, eval=FALSE}
+# set of records keeping only one occurrence per pixel
+occ_pix <- extract(var[[1]], occ[, 2:3], cells = TRUE)[, 3] 
+occ_opp <- occ[!duplicated(occ_pix), ] 
+
+# records filtered 10 km
+occ_10 <- thin(occ_opp, lat.col = "Latitude", long.col = "Longitude",
+               spec.col = "Species", thin.par = 10, reps = 3, 
+               locs.thinned.list.return = TRUE, write.files = FALSE,
+               write.log.file = FALSE)
+
+occ_10 <- data.frame(Species = occ_opp[1, 1], occ_10[[1]])
+
+# records filtered 20 km
+occ_20 <- thin(occ_opp, lat.col = "Latitude", long.col = "Longitude",
+               spec.col = "Species", thin.par = 20, reps = 3, 
+               locs.thinned.list.return = TRUE, write.files = FALSE,
+               write.log.file = FALSE)
+
+occ_20 <- data.frame(Species = occ_opp[1, 1], occ_20[[1]])
+
+# records filtered 50 km
+occ_50 <- thin(occ_opp, lat.col = "Latitude", long.col = "Longitude",
+               spec.col = "Species", thin.par = 50, reps = 3, 
+               locs.thinned.list.return = TRUE, write.files = FALSE,
+               write.log.file = FALSE)
+
+occ_50 <- data.frame(Species = occ_opp[1, 1], occ_50[[1]])
+
+# records filtered 100 km
+occ_100 <- thin(occ_opp, lat.col = "Latitude", long.col = "Longitude",
+               spec.col = "Species", thin.par = 100, reps = 3, 
+               locs.thinned.list.return = TRUE, write.files = FALSE,
+               write.log.file = FALSE)
+
+occ_100 <- data.frame(Species = occ_opp[1, 1], occ_100[[1]])
+```
+
+#### Testing autocorrelation
+
+We used Moran's I and four example variable to test for spatial autocorrelation.
+
+```{r, eval=FALSE}
+# values of example variables
+exvar <- var[[c(7, 9, 13, 15)]]
+occ_opp <- cbind(occ_opp[, 1:3], extract(exvar, occ_opp[, 2:3])[, -1])
+occ_10 <- cbind(occ_10[, 1:3], extract(exvar, occ_10[, 2:3])[, -1])
+occ_20 <- cbind(occ_20[, 1:3], extract(exvar, occ_20[, 2:3])[, -1])
+occ_50 <- cbind(occ_50[, 1:3], extract(exvar, occ_50[, 2:3])[, -1])
+occ_100 <- cbind(occ_100[, 1:3], extract(exvar, occ_100[, 2:3])[, -1])
+
+# Moran's I tests
+varn <- colnames(occ_20)[4:7]
+
+## one per pixel
+mi <- lapply(varn, function(x) {
+  rbind(
+    data.frame(variable = x, moranfast(occ_opp[, x], occ_opp$Longitude, 
+                                     occ_opp$Latitude)),
+    data.frame(variable = x, moranfast(occ_10[, x], occ_10$Longitude,
+                                     occ_10$Latitude)),
+    data.frame(variable = x, moranfast(occ_20[, x], occ_20$Longitude, 
+                                     occ_20$Latitude)),
+    data.frame(variable = x, moranfast(occ_50[, x], occ_50$Longitude, 
+                                     occ_50$Latitude)),
+    data.frame(variable = x, moranfast(occ_100[, x], occ_100$Longitude, 
+                                     occ_100$Latitude))
+  )
+})
+
+# put all together
+filt <- c("Pixel", paste(c("10", "20", "50", "100"), "km"))
+
+mi <- lapply(1:4, function(x) {
+  rbind(mi_opp[[x]], mi_10[[x]], mi_20[[x]], mi_50[[x]], mi_100[[x]])
+})
+
+np <- c(nrow(occ_opp), nrow(occ_10), nrow(occ_20), nrow(occ_50), nrow(occ_100))
+
+mi <- data.frame(Filter = rep(filt, 4), 
+                 N_points = rep(np, 4),
+                 do.call(rbind, mi))
+
+mi <- mi[order(unlist(sapply(mi$Filter, function(x) which(filt == x)))), ]
+
+# save results
+dir.create("Results")
+
+write.csv(mi, "Results/spatial_autocorrelation.csv", row.names = FALSE)
+
+write.csv(occ_50, "Results/data_thinned_50km.csv", row.names = FALSE)
+write.csv(occ_100, "Results/data_thinned_100km.csv", row.names = FALSE)
+```
+
+#### How data looks like after thinning
+
+```{r, eval=FALSE}
+# world map
+wm <- geodata::world(resolution = 3, path = "Data")
+
+# plot
+par(mfrow = c(1, 2), mar = rep(1, 4), cex = 0.8)
+
+plot(wm, xlim = c(90, 125), ylim = c(0, 40), col = "gray80", border = "gray50", 
+     mar = NA, main = "One record per pixel")
+points(occ_opp[, 2:3], pch = 1, cex = 0.8, col = "gray10")
+legend(90, 40, legend = c("No pixel duplicates"), pch = 1, 
+       col = "gray10", bty = "n", cex = 0.8)
+
+plot(wm, xlim = c(90, 125), ylim = c(0, 40), col = "gray80", border = "gray50", 
+     mar = NA, main = "Thinned data (50 km and 100 km)")
+points(occ_50[, 2:3], pch = 16, col = "gray15")
+points(occ_100[, 2:3], pch = 3, col = "red")
+legend(90, 40, legend = c("50 km", "100 km"), pch = c(16, 3), 
+       col = c("gray15", "red"), bty = "n", cex = 0.8)
+```
+
+<br>
+
+### Calibration area simulation
+
+The area for model calibration is of critical importance in ENM, a well defined area helps to make better models and avoid over-fitting and other problems. We used a method developed by [Machado-Stredel et at. (2021)](https://doi.org/10.21425/F5FBG48814) to simulate such areas using the `grinnell` package.
+
+#### Preparing data
+
+```{r, eval=FALSE}
+# masking layers to an area relevant for simulation
+## extent for area
+extm <- ext(c(80, 135, -10, 50))
+
+## masking
+var_mask <- crop(var, extm)
+var_mask <- mask(var_mask, wm)
+
+# checking points with masked layers
+occ_100 <- occ_100[!is.na(extract(var_mask, occ_100[, 2:3])[, 2]), ]
+
+# parameters for simulation
+## dispersal parameters
+kernel <- "normal"
+k_sd <- c(0.5, 1, 3, 5)
+dis_events <- c(75, 150, 300)
+```
+
+#### Running simulations
+
+The code bellow runs all combination of parameters specified above. This helps to define which ones could work better to reconstruct accessibility for the species.
+
+```{r, eval=FALSE}
+m_tests <- lapply(dis_events, function(x) {
+  msim <- lapply(k_sd, function(y) {
+    odir <- paste0("Results/M_sim_sd", y, "_de", x)
+      
+    M_simulationR(data = occ_100[, 1:3], 
+                  current_variables = raster::stack(var_mask), 
+                  dispersal_kernel = kernel, kernel_spread = y, 
+                  max_dispersers = 4, dispersal_events = x, 
+                  suitability_threshold = 1, output_directory = odir)
+    
+    message("Disp. events ", x, ", SD ", y)
+  })
+})
+```
+
+Considering the results, we decided to use a barrier layer to represent the Wallace line, SD 5, and 75 dispersal events.
+
+```{r, eval=FALSE}
+# parameters
+k_sd <- 5
+dis_events <- 75
+
+# barrier
+bar <- vect("Data/wallace_barrier.gpkg")
+
+barr <- mask(var_mask$BIO1, bar)
+barr <- mask(barr, bar, inverse = TRUE, updatevalue = 1)
+
+# simulation
+m_barrier <- M_simulationR(data = occ_100[, 1:3], 
+                  current_variables = raster::stack(var_mask), 
+                  dispersal_kernel = kernel, kernel_spread = k_sd, 
+                  max_dispersers = 4, dispersal_events = dis_events, 
+                  barriers = raster::raster(barr), suitability_threshold = 1, 
+                  output_directory = "Results/M_sim_barrier_sd6_de75")
+```
+
+Adjusting final result from simulation to include all records of the species to be used in ENM.
+
+```{r, eval=FALSE}
+# buffer M to include 3 points in the border
+m <- buffer(vect(m_barrier$A_polygon), width = 30000)
+m <- crop(m, wm)
+crs(m) <- crs(var_mask)
+
+writeVector(m, filename = "Results/M_final.gpkg")
+```
+
+<br>
+
+### Variable reduction
+
+Using an excessive number of variables in ENM usually results in over-fitted models. To avoid this problem, we used a PCA to summarize the variance of all our variables and obtain new variables (PCs) that are not highly correlated and represent most of the variance in fewer dimensions.  
+
+```{r, eval=FALSE}
+# masking layers to land
+var_land <- crop(var, wm, mask = TRUE)
+
+# PCA with raster layers
+pcas <- pca_raster(variables = raster::stack(var_land), n_pcs = NULL,
+                   write_to_directory = TRUE, 
+                   output_directory = "Results/PCA_results")
+
+var_land <- rast(pcas$PCRaster_initial)
+writeRaster(var_land, filename = "Results/variables_pca.tif")
+
+# PCs for (calibration area)
+m_var <- crop(var_land, m, mask = TRUE)
+m_vars <- raster::stack(m_var[[1:5]])
+
+writeRaster(m_var, filename = "Results/m_variables.tif")
+
+# check variance explained by PCs
+summary(pcas$PCA_results)  # 1st-5th PCs > 99% of all variance
+
+# testing variable contribution
+mx <- "/mnt/backup/Maxent"  # maxent path
+
+var_cont <- explore_var_contrib(occ = occ_100[, 1:3], 
+                                M_variables = m_vars, 
+                                maxent.path = mx, plot = FALSE)
+
+plot_contribution(contribution_list = var_cont) # they all contribute
+```
+
+<br>
+
+### Ecological niche modeling (ENM)
+
+Our ENM process consisted of several steps: 1) model calibration and selection, 2) model projection, 3) final model consensus, and 4) quantification of extrapolation risks.
+
+#### Preparing data
+
+```{r, eval=FALSE}
+# folder for modeling process
+modeldir <- "Results/Modeling"
+dir.create(modeldir)
+
+# files and directories to be created
+oc <- paste0(modeldir, "/occ")
+bg <- paste0(modeldir, "/background")
+
+# background size
+m_sample <- round(ncell(m_var) * 0.1)
+
+dprep <- prepare_swd(occ = occ_100[, 1:3], species = "Species", 
+                     longitude = "Longitude", latitude = "Latitude", 
+                     data.split.method = "random", train.proportion = 0.7, 
+                     raster.layers = m_vars, 
+                     sample.size = m_sample, var.sets = "all_comb",
+                     min.number = 2, save = TRUE, name.occ = oc, 
+                     back.folder = bg)
+
+```
+
+#### Model calibration
+
+```{r, eval=FALSE}
+# parameters
+oj <- "Results/Modeling/occ_joint.csv"
+otr <- "Results/Modeling/occ_train.csv"
+ote <- "Results/Modeling/occ_test.csv"
+bt <- "Results/Modeling/candidate_batch"
+odir <- "Results/Modeling/Candidate_models"
+rm <- c(seq(0.1, 1, 0.2), 1:5)
+fc <- c("q", "p", "lq", "lp", "qp", "lqp")
+oeval <- "Results/Modeling/Calibration_results"
+
+# model calibration and selection
+cal <- kuenm_cal_swd(occ.joint = oj, occ.tra = otr, occ.test = ote, 
+                     back.dir = bg, batch = bt, out.dir.models = odir, 
+                     reg.mult = rm, f.clas = fc, maxent.path = mx,
+                     out.dir.eval = oeval)
+```
+
+#### Model projection
+
+```{r, eval=FALSE}
+# preparing variables for model projection to North America
+## set of variables selected
+s <- unique(sapply(strsplit(cal[[2]]$Model, "_"), function(x) {x[6]}))
+set_var <- paste0("Set_", s)
+
+model_back <- read.csv("Results/Modeling/background/Set_12.csv")[-(1:3)]
+varset <- colnames(model_back)
+
+## preparing projection layers
+mxusca <- wm[wm$NAME_0 %in% c("Mexico", "Canada", "United States"), ]
+extcut <- ext(-180, -50, 14, 84)
+mxusca <- crop(mxusca, extcut)
+
+var_mxusca <- crop(var_land, mxusca, mask = TRUE)[[varset]]
+var_native <- crop(var_land, extm)[[varset]]
+
+## preparing directories
+gdir <-  "Results/Modeling/G_variables"
+dir.create(gdir)
+
+setdir <- paste0(gdir, "/", set_var)
+dir.create(setdir)
+
+vdirm <- paste0(setdir, "/Native")
+dir.create(vdirm)
+
+vdir <- paste0(setdir, "/North_america")
+dir.create(vdir)
+
+## writing projection layers
+natnames <- paste0(vdirm, "/", names(var_native), ".asc")
+mxuscanames <- paste0(vdir, "/", names(var_native), ".asc")
+
+writeRaster(var_mxusca, filename = mxuscanames, NAflag = -9999, overwrite = T)
+writeRaster(var_native, filename = natnames, NAflag = -9999, overwrite = T)
+
+# parameters for final model and projections
+btf <- "Results/Modeling/batchfin"
+jk <- TRUE
+of <- "cloglog"
+pr <- TRUE
+mdir <- "Results/Modeling/Final_models"
+
+# final model and projection to North America
+kuenm_mod_swd(occ.joint = oj, back.dir = bg, out.eval = oeval, batch = btf, 
+              jackknife = jk, out.format = of, project = pr, G.var.dir = gdir, 
+              maxent.path = mx, out.dir = mdir)
+```
+
+#### Model consensus
+
+```{r, eval=FALSE}
+# parameters
+spn <- occ_100[1, 1]
+ft <- "asc"
+sts <- c("med", "range")
+scen <- dir(paste0(gdir, "/Set_12"))
+ex <- "E"
+stdir <- "Results/Modeling/Final_model_stats"
+
+# run analysis
+kuenm_modstats_swd(sp.name = spn, fmod.dir = mdir, format = ft, 
+                   statistics = sts, proj.scenarios = scen, 
+                   ext.type = ex, out.dir = stdir)
+```
+
+#### Extrapolation risk analysis (MOP)
+
+```{r, eval=FALSE}
+# parameters for MOP
+tp <- "detailed"
+nafix <- FALSE
+
+# running MOP (only detecting areas outside calibration ranges)
+mop_native <- mop(m = model_back, g = var_native, type = tp, fix_NA = nafix)
+
+mop_mxusca <- mop(m = model_back, g = var_mxusca, type = tp, fix_NA = nafix)
+
+# writing results
+mopdir <- "Results/Modeling/MOP"
+dir.create(mopdir)
+
+mb <- paste0(mopdir, "/mop_basic_", c("nat", "mxusca"), ".tif")
+ms <- paste0(mopdir, "/mop_simple_", c("nat", "mxusca"), ".tif")
+mth <- paste0(mopdir, "/mop_to_high_", c("nat", "mxusca"), ".tif")
+mtl <- paste0(mopdir, "/mop_to_low_", c("nat", "mxusca"), ".tif")
+mthc <- paste0(mopdir, "/mop_to_high_comb_", c("nat", "mxusca"), ".tif")
+mtlc <- paste0(mopdir, "/mop_to_low_comb_", c("nat", "mxusca"), ".tif")
+
+writeRaster(mop_native$mop_basic, mb[1])
+writeRaster(mop_mxusca$mop_basic, mb[2])
+writeRaster(mop_native$mop_simple, ms[1])
+writeRaster(mop_mxusca$mop_simple, ms[2])
+writeRaster(mop_native$mop_detailed$towards_high_end, mth[1])
+writeRaster(mop_native$mop_detailed$towards_low_end, mtl[1])
+writeRaster(mop_mxusca$mop_detailed$towards_low_end, mtl[2])
+writeRaster(mop_native$mop_detailed$towards_high_combined, mthc[1])
+writeRaster(mop_native$mop_detailed$towards_low_combined, mtlc[1])
+writeRaster(mop_mxusca$mop_detailed$towards_low_combined, mtlc[2])
+```
