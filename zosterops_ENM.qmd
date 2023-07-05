@@ -59,7 +59,8 @@ Occurrence records were obtained manually from GBIF and stored in our working di
     -   Removed a bunch of NE China records considering this source.
 -   Removed 2 more records, which were from Baja California!
 -   Checked for coincidence with MERRAClim dataset. MERRA is not clipped to coasts, so we used the China_ADM coverage from DivaGIS. Removed 20643 records that are "offshore."
--   The total remaining records (**222673**) were saved in CSV format.
+-   Restricted records to 15 May through 30 June.
+-   The total remaining records (**23153**) were saved in CSV format.
 
 #### Reading occurrence data and further filtering
 
@@ -150,45 +151,40 @@ We used Moran's I and four example variable to test for spatial autocorrelation.
 ```{r, eval=FALSE}
 # values of example variables
 exvar <- var[[c(7, 9, 13, 15)]]
-occ_opp <- cbind(occ_opp[, 1:3], extract(exvar, occ_opp[, 2:3])[, -1])
-occ_10 <- cbind(occ_10[, 1:3], extract(exvar, occ_10[, 2:3])[, -1])
-occ_20 <- cbind(occ_20[, 1:3], extract(exvar, occ_20[, 2:3])[, -1])
-occ_50 <- cbind(occ_50[, 1:3], extract(exvar, occ_50[, 2:3])[, -1])
-occ_100 <- cbind(occ_100[, 1:3], extract(exvar, occ_100[, 2:3])[, -1])
+
+occ_list <- list(
+  cbind(occ_opp[, 1:3], extract(exvar, occ_opp[, 2:3])[, -1]),
+  cbind(occ_10[, 1:3], extract(exvar, occ_10[, 2:3])[, -1]),
+  cbind(occ_20[, 1:3], extract(exvar, occ_20[, 2:3])[, -1]),
+  cbind(occ_50[, 1:3], extract(exvar, occ_50[, 2:3])[, -1]),
+  cbind(occ_100[, 1:3], extract(exvar, occ_100[, 2:3])[, -1])
+)
 
 # Moran's I tests
 varn <- colnames(occ_20)[4:7]
 
 ## one per pixel
-mi <- lapply(varn, function(x) {
+mi <- lapply(occ_list, function(x) {
   rbind(
-    data.frame(variable = x, moranfast(occ_opp[, x], occ_opp$Longitude, 
-                                     occ_opp$Latitude)),
-    data.frame(variable = x, moranfast(occ_10[, x], occ_10$Longitude,
-                                     occ_10$Latitude)),
-    data.frame(variable = x, moranfast(occ_20[, x], occ_20$Longitude, 
-                                     occ_20$Latitude)),
-    data.frame(variable = x, moranfast(occ_50[, x], occ_50$Longitude, 
-                                     occ_50$Latitude)),
-    data.frame(variable = x, moranfast(occ_100[, x], occ_100$Longitude, 
-                                     occ_100$Latitude))
+    data.frame(variable = varn[1], moranfast(x[, varn[1]], x$Longitude,
+                                             x$Latitude)),
+    data.frame(variable = varn[2], moranfast(x[, varn[2]], x$Longitude,
+                                             x$Latitude)),
+    data.frame(variable = varn[3], moranfast(x[, varn[3]], x$Longitude,
+                                             x$Latitude)),
+    data.frame(variable = varn[4], moranfast(x[, varn[4]], x$Longitude,
+                                             x$Latitude))
   )
 })
 
 # put all together
 filt <- c("Pixel", paste(c("10", "20", "50", "100"), "km"))
 
-mi <- lapply(1:4, function(x) {
-  rbind(mi_opp[[x]], mi_10[[x]], mi_20[[x]], mi_50[[x]], mi_100[[x]])
-})
+np <- sapply(occ_list, nrow)
 
-np <- c(nrow(occ_opp), nrow(occ_10), nrow(occ_20), nrow(occ_50), nrow(occ_100))
-
-mi <- data.frame(Filter = rep(filt, 4), 
-                 N_points = rep(np, 4),
+mi <- data.frame(Filter = rep(filt, each = 4), 
+                 N_points = rep(np, each = 4),
                  do.call(rbind, mi))
-
-mi <- mi[order(unlist(sapply(mi$Filter, function(x) which(filt == x)))), ]
 
 # save results
 dir.create("Results")
@@ -240,7 +236,8 @@ var_mask <- crop(var, extm)
 var_mask <- mask(var_mask, wm)
 
 # checking points with masked layers
-occ_100 <- occ_100[!is.na(extract(var_mask, occ_100[, 2:3])[, 2]), ]
+occ_100 <- occ_list[[5]][!is.na(extract(var_mask, 
+                                        occ_list[[5]][, 2:3])[, 2]), ]
 
 # parameters for simulation
 ## dispersal parameters
@@ -256,13 +253,13 @@ The code bellow runs all combination of parameters specified above. This helps t
 ```{r, eval=FALSE}
 m_tests <- lapply(dis_events, function(x) {
   msim <- lapply(k_sd, function(y) {
-    odir <- paste0("Results/M_sim_sd", y, "_de", x)
+    odir <- paste0("Results/M_sim1_sd", y, "_de", x)
       
     M_simulationR(data = occ_100[, 1:3], 
                   current_variables = raster::stack(var_mask), 
                   dispersal_kernel = kernel, kernel_spread = y, 
                   max_dispersers = 4, dispersal_events = x, 
-                  suitability_threshold = 1, output_directory = odir)
+                  suitability_threshold = 0.1, output_directory = odir)
     
     message("Disp. events ", x, ", SD ", y)
   })
@@ -273,8 +270,8 @@ Considering the results, we decided to use a barrier layer to represent the Wall
 
 ```{r, eval=FALSE}
 # parameters
-k_sd <- 5
-dis_events <- 75
+k_sd <- 3
+dis_events <- 150
 
 # barrier
 bar <- vect("Data/wallace_barrier.gpkg")
@@ -287,8 +284,8 @@ m_barrier <- M_simulationR(data = occ_100[, 1:3],
                   current_variables = raster::stack(var_mask), 
                   dispersal_kernel = kernel, kernel_spread = k_sd, 
                   max_dispersers = 4, dispersal_events = dis_events, 
-                  barriers = raster::raster(barr), suitability_threshold = 1, 
-                  output_directory = "Results/M_sim_barrier_sd6_de75")
+                  barriers = raster::raster(barr), suitability_threshold = 0.1, 
+                  output_directory = "Results/M_sim_barrier_sd3_de150")
 ```
 
 Adjusting final result from simulation to include all records of the species to be used in ENM.
@@ -296,7 +293,7 @@ Adjusting final result from simulation to include all records of the species to 
 ```{r, eval=FALSE}
 # buffer M to include 3 points in the border
 m <- buffer(vect(m_barrier$A_polygon), width = 30000)
-m <- crop(m, wm)
+m <- crop(buffer(m, width = 0), wm)
 crs(m) <- crs(var_mask)
 
 writeVector(m, filename = "Results/M_final.gpkg")
@@ -320,14 +317,14 @@ pcas <- pca_raster(variables = raster::stack(var_land), n_pcs = NULL,
 var_land <- rast(pcas$PCRaster_initial)
 writeRaster(var_land, filename = "Results/variables_pca.tif")
 
+# check variance explained by PCs
+summary(pcas$PCA_results)  # 1st-5th PCs > 99% of all variance
+
 # PCs for (calibration area)
 m_var <- crop(var_land, m, mask = TRUE)
 m_vars <- raster::stack(m_var[[1:5]])
 
 writeRaster(m_var, filename = "Results/m_variables.tif")
-
-# check variance explained by PCs
-summary(pcas$PCA_results)  # 1st-5th PCs > 99% of all variance
 
 # testing variable contribution
 mx <- "/mnt/backup/Maxent"  # maxent path
@@ -349,7 +346,7 @@ Our ENM process consisted of several steps: 1) model calibration and selection, 
 
 ```{r, eval=FALSE}
 # folder for modeling process
-modeldir <- "Results/Modeling"
+modeldir <- "Results/Modeling1"
 dir.create(modeldir)
 
 # files and directories to be created
@@ -373,14 +370,14 @@ dprep <- prepare_swd(occ = occ_100[, 1:3], species = "Species",
 
 ```{r, eval=FALSE}
 # parameters
-oj <- "Results/Modeling/occ_joint.csv"
-otr <- "Results/Modeling/occ_train.csv"
-ote <- "Results/Modeling/occ_test.csv"
-bt <- "Results/Modeling/candidate_batch"
-odir <- "Results/Modeling/Candidate_models"
+oj <- "Results/Modeling1/occ_joint.csv"
+otr <- "Results/Modeling1/occ_train.csv"
+ote <- "Results/Modeling1/occ_test.csv"
+bt <- "Results/Modeling1/candidate_batch"
+odir <- "Results/Modeling1/Candidate_models"
 rm <- c(seq(0.1, 1, 0.2), 1:5)
 fc <- c("q", "p", "lq", "lp", "qp", "lqp")
-oeval <- "Results/Modeling/Calibration_results"
+oeval <- "Results/Modeling1/Calibration_results"
 
 # model calibration and selection
 cal <- kuenm_cal_swd(occ.joint = oj, occ.tra = otr, occ.test = ote, 
@@ -397,7 +394,8 @@ cal <- kuenm_cal_swd(occ.joint = oj, occ.tra = otr, occ.test = ote,
 s <- unique(sapply(strsplit(cal[[2]]$Model, "_"), function(x) {x[6]}))
 set_var <- paste0("Set_", s)
 
-model_back <- read.csv("Results/Modeling/background/Set_12.csv")[-(1:3)]
+model_back <- read.csv(paste0("Results/Modeling1/background/", set_var,
+                              ".csv"))[-(1:3)]
 varset <- colnames(model_back)
 
 ## preparing projection layers
@@ -409,7 +407,7 @@ var_mxusca <- crop(var_land, mxusca, mask = TRUE)[[varset]]
 var_native <- crop(var_land, extm)[[varset]]
 
 ## preparing directories
-gdir <-  "Results/Modeling/G_variables"
+gdir <-  "Results/Modeling1/G_variables"
 dir.create(gdir)
 
 setdir <- paste0(gdir, "/", set_var)
@@ -425,15 +423,15 @@ dir.create(vdir)
 natnames <- paste0(vdirm, "/", names(var_native), ".asc")
 mxuscanames <- paste0(vdir, "/", names(var_native), ".asc")
 
-writeRaster(var_mxusca, filename = mxuscanames, NAflag = -9999, overwrite = T)
-writeRaster(var_native, filename = natnames, NAflag = -9999, overwrite = T)
+writeRaster(var_mxusca, filename = mxuscanames, NAflag = -9999)
+writeRaster(var_native, filename = natnames, NAflag = -9999)
 
 # parameters for final model and projections
-btf <- "Results/Modeling/batchfin"
+btf <- "Results/Modeling1/batchfin"
 jk <- TRUE
 of <- "cloglog"
 pr <- TRUE
-mdir <- "Results/Modeling/Final_models"
+mdir <- "Results/Modeling1/Final_models"
 
 # final model and projection to North America
 kuenm_mod_swd(occ.joint = oj, back.dir = bg, out.eval = oeval, batch = btf, 
@@ -448,9 +446,9 @@ kuenm_mod_swd(occ.joint = oj, back.dir = bg, out.eval = oeval, batch = btf,
 spn <- occ_100[1, 1]
 ft <- "asc"
 sts <- c("med", "range")
-scen <- dir(paste0(gdir, "/Set_12"))
+scen <- dir(paste0(gdir, "/", set_var))
 ex <- "E"
-stdir <- "Results/Modeling/Final_model_stats"
+stdir <- "Results/Modeling1/Final_model_stats"
 
 # run analysis
 kuenm_modstats_swd(sp.name = spn, fmod.dir = mdir, format = ft, 
@@ -464,16 +462,20 @@ kuenm_modstats_swd(sp.name = spn, fmod.dir = mdir, format = ft,
 # parameters for MOP
 tp <- "detailed"
 nafix <- FALSE
+dist <- TRUE
 
 # running MOP (only detecting areas outside calibration ranges)
-mop_native <- mop(m = model_back, g = var_native, type = tp, fix_NA = nafix)
+mop_native <- mop(m = model_back, g = var_native, type = tp, fix_NA = nafix,
+                  calculate_distance = dist, parallel = TRUE, n_cores = 4)
 
-mop_mxusca <- mop(m = model_back, g = var_mxusca, type = tp, fix_NA = nafix)
+mop_mxusca <- mop(m = model_back, g = var_mxusca, type = tp, fix_NA = nafix, 
+                  calculate_distance = dist, parallel = TRUE, n_cores = 4)
 
 # writing results
-mopdir <- "Results/Modeling/MOP"
+mopdir <- "Results/Modeling1/MOP"
 dir.create(mopdir)
 
+md <- paste0(mopdir, "/mop_distance_", c("nat", "mxusca"), ".tif")
 mb <- paste0(mopdir, "/mop_basic_", c("nat", "mxusca"), ".tif")
 ms <- paste0(mopdir, "/mop_simple_", c("nat", "mxusca"), ".tif")
 mth <- paste0(mopdir, "/mop_to_high_", c("nat", "mxusca"), ".tif")
@@ -481,14 +483,18 @@ mtl <- paste0(mopdir, "/mop_to_low_", c("nat", "mxusca"), ".tif")
 mthc <- paste0(mopdir, "/mop_to_high_comb_", c("nat", "mxusca"), ".tif")
 mtlc <- paste0(mopdir, "/mop_to_low_comb_", c("nat", "mxusca"), ".tif")
 
+writeRaster(mop_native$mop_distances, md[1])
+writeRaster(mop_mxusca$mop_distances, md[2])
 writeRaster(mop_native$mop_basic, mb[1])
 writeRaster(mop_mxusca$mop_basic, mb[2])
 writeRaster(mop_native$mop_simple, ms[1])
 writeRaster(mop_mxusca$mop_simple, ms[2])
 writeRaster(mop_native$mop_detailed$towards_high_end, mth[1])
+writeRaster(mop_mxusca$mop_detailed$towards_high_end, mth[2])
 writeRaster(mop_native$mop_detailed$towards_low_end, mtl[1])
 writeRaster(mop_mxusca$mop_detailed$towards_low_end, mtl[2])
 writeRaster(mop_native$mop_detailed$towards_high_combined, mthc[1])
+writeRaster(mop_mxusca$mop_detailed$towards_high_combined, mthc[2])
 writeRaster(mop_native$mop_detailed$towards_low_combined, mtlc[1])
 writeRaster(mop_mxusca$mop_detailed$towards_low_combined, mtlc[2])
 ```
