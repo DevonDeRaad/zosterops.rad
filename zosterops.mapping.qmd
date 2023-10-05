@@ -152,15 +152,16 @@ ggplot()+
 #plot LA samples
 ggplot()+
   geom_polygon(data = pac, aes(x=long, y = lat, group = group), fill="lightgrey", col="black", cex=.1)+
-  coord_sf(xlim = c(-121, -113), ylim = c(31, 36)) + 
+  coord_sf(xlim = c(-125, -114), ylim = c(32, 42)) + 
   geom_point(data = sampling.df, aes(x = long, y = lat, fill=species, size=count), pch=21, color="black", alpha =1, show.legend=TRUE) +
+  borders("state")+
   theme_classic()+
   scale_fill_manual(values=rep("black", times=6))+
   scale_size_continuous(range = c(3,6))+
   guides(fill = guide_legend(override.aes = list(size = 4), order=1, label.theme = element_text(face = "italic")),
          size = guide_legend(nrow = 1, order = 2))+
   theme(legend.position = NULL)
-#ggsave("~/Desktop/cali.zosterops.rad/cali.map.pdf", width = 5.5, height = 3, units= "in")
+#ggsave("~/Desktop/cali.zosterops.rad/tall.cali.map.pdf", width = 5.5, height = 8, units= "in")
 
 ```
 
