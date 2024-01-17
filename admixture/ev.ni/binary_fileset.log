@@ -1,0 +1,29 @@
+PLINK v1.90b6.21 64-bit (19 Oct 2020)
+Options in effect:
+  --allow-extra-chr
+  --double-id
+  --make-bed
+  --out binary_fileset
+  --vcf /home/d669d153/work/zosterops.rad/admixture/ev.ni/ev.ni.vcf
+
+Hostname: r05r08n02
+Working directory: /panfs/pfs.local/work/bi/d669d153/zosterops.rad/admixture/ev.ni
+Start time: Wed May  3 09:47:15 2023
+
+Random number seed: 1683125237
+515917 MB RAM detected; reserving 257958 MB for main workspace.
+--vcf: binary_fileset-temporary.bed + binary_fileset-temporary.bim +
+binary_fileset-temporary.fam written.
+402 variants loaded from .bim file.
+7 people (0 males, 0 females, 7 ambiguous) loaded from .fam.
+Ambiguous sex IDs written to binary_fileset.nosex .
+Using 1 thread (no multithreaded calculations invoked).
+Before main variant filters, 7 founders and 0 nonfounders present.
+Calculating allele frequencies... done.
+Total genotyping rate is 0.959844.
+402 variants and 7 people pass filters and QC.
+Note: No phenotypes present.
+--make-bed to binary_fileset.bed + binary_fileset.bim + binary_fileset.fam ...
+done.
+
+End time: Wed May  3 09:47:17 2023
