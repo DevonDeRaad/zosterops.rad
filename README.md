@@ -1,4 +1,8 @@
-# Repository holding code and input files for introduced Zosterops RAD analyses
+# Code from the manuscript: On the brink of explosion? Identifying the source and potential spread of introduced Zosterops white-eyes in North America
+* Authors: Devon A. DeRaad, Marlon E. Cobos, Natalie R. Hofmeister, Lucas H. DeCicco, Madhvi X. Venkatraman, Isao Nishiumi, Bailey McKay, Fa-Sheng Zou, Kazuto Kawakami, Chang-Hoe Kim, Ruey-Shing Lin, Cheng-Te Yao, Kimball L. Garrett, Stepfanie M. Aguillon, John E. McCormack, Herman L. Mays Jr., A. Townsend Peterson, Robert G. Moyle, and Allison J. Shultz
+* Corresponding author: Devon A. DeRaad (devonderaad@gmail.com)
+
+## Background
 
 ### Data availability
 *    All SNP datasets used in this manuscript can be found in the folder called [data](https://github.com/DevonDeRaad/zosterops.rad/tree/main/data).
