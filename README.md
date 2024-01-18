@@ -26,7 +26,7 @@
 ### ADMIXTURE
 *   All input and output files from ADMIXTURE runs for this project can be found in the folder called [admixture](https://github.com/DevonDeRaad/zosterops.rad/tree/main/admixture).
 *   The resulting K optimization process and the output for each K value can be viewed here in a commprehensive, vignette-style walkthrough:
-    > <https://devonderaad.github.io/zosterops.rad/zosterops.admixture.html>
+    > <https://devonderaad.github.io/zosterops.rad/admixture/zosterops.admixture.html>
 
 ### Calculate Fst
 *   The process of calculating pairwise Fst among and within species is viewable here:
