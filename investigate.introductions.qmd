@@ -9,6 +9,7 @@ embed-resources: true
 
 ### Load libraries
 ```{r, results='hide'}
+#load necessary libraries
 library(vcfR) #v1.14.0
 library(ggplot2) #v3.4.1
 library(maps) #v3.4.1
@@ -22,19 +23,21 @@ library(StAMPP)
 
 ### Read in vcf
 ```{r}
-### Filter input SNP files based on smaple inclusion and MAC to increase signal to noise ratio
 #read in filtered vcf
 vcfR <- read.vcfR("~/Desktop/cali.zosterops.rad/filtered.snps.vcf.gz")
+#see details on the vcf
 vcfR
-#bring in sample info
 #read in sample info csv
 sample.info<-read.csv("~/Desktop/cali.zosterops.rad/zosterops.trimmed.RAD.sampling.csv")
+#trim to retain only samples that passed filtering protocols and are contained in the vcf
 sample.info<-sample.info[sample.info$ID %in% colnames(vcfR@gt),]
+#check how many samples are retained per species
 table(sample.info$Species)
 #see sample order
 colnames(vcfR@gt)
-#make sure sample info DF order matches order of samples in vcf
+#make sure sample info DF order matches order of samples in vcf (this should return all TRUE)
 sample.info$ID == colnames(vcfR@gt)[-1]
+#fix rownames
 rownames(sample.info)<-c(1:nrow(sample.info))
 ```
 
@@ -347,7 +350,7 @@ ggplot(s.df, aes(x=factor(species, level = level_order), y=het)) +
 
   #scale_y_continuous(sec.axis = sec_axis(trans = (~.*1), name="Pi"))
 #save
-ggsave("~/Desktop/cali.zosterops.rad/simp.diversity.long.pdf", width = 8.5, height = 2, units= "in")
+#ggsave("~/Desktop/cali.zosterops.rad/simp.diversity.long.pdf", width = 8.5, height = 2, units= "in")
 
 #split the dataframe between simplex and japonicus
 j.df<-plotting.df[23:67,]
@@ -373,7 +376,7 @@ ggplot(j.df, aes(x=factor(species, level = level_order), y=het)) +
   labs(x="",y="heterozygosity / Pi")
   #scale_y_continuous(sec.axis = sec_axis(trans = (~.*1), name="Pi"))
 #save
-ggsave("~/Desktop/cali.zosterops.rad/japon.diversity.pdf", width = 8.5, height = 2, units= "in")
+#ggsave("~/Desktop/cali.zosterops.rad/japon.diversity.pdf", width = 8.5, height = 2, units= "in")
 ```
 
 ### Plot the number of private alleles in each sampling loc
@@ -416,6 +419,6 @@ ggplot(j.pops, aes(x=factor(Pop.ID, level = level_order), y=Private)) +
         legend.position = "none")+
   labs(x="",y="private alleles")
 #save
-ggsave("~/Desktop/cali.zosterops.rad/japon.priv.pdf", width = 8.5, height = 2, units= "in")
+#ggsave("~/Desktop/cali.zosterops.rad/japon.priv.pdf", width = 8.5, height = 2, units= "in")
 ```
 
