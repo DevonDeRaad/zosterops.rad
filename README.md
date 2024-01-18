@@ -24,7 +24,8 @@
     > <https://devonderaad.github.io/zosterops.rad/splitstree.html>
 
 ### ADMIXTURE
-*   The process of assigning samples into bins of genetic ancestry without a priori assignments using ADMIXTURE can be viewed here:
+*   All input and output files from ADMIXTURE runs for this project can be found in the folder called [admixture](https://github.com/DevonDeRaad/zosterops.rad/tree/main/admixture).
+*   The resulting K optimization process and the output for each K value can be viewed here in a commprehensive, vignette-style walkthrough:
     > <https://devonderaad.github.io/zosterops.rad/zosterops.admixture.html>
 
 ### Calculate Fst
@@ -34,8 +35,9 @@
 ### Triangle plots
 *   The process of creating triangle plots for hybrid samples is viewable here:
     > <https://devonderaad.github.io/zosterops.rad/zosterops.triangle.plots.html>
+*    Please note that this analysis was subsequently dropped from the manuscript during the editing stage.
 
-### Investigate introduced pop ancestry and diversity
+### Investigate introduced population ancestry and diversity
 *   The process of investigating the ancestry and genetic diversity of introduced pops is viewable here:
     > <https://devonderaad.github.io/zosterops.rad/investigate.introductions.html>
 
