@@ -9,6 +9,7 @@ embed-resources: true
 
 ### Load libraries
 ```{r, results='hide'}
+#read in each library used for this analysis
 library(vcfR)
 library(SNPfiltR)
 library(ggplot2)
@@ -18,34 +19,36 @@ library(StAMPP)
 
 ### read in vcf and trim it
 ```{r}
-### Filter input SNP files based on smaple inclusion and MAC to increase signal to noise ratio
-#read in filtered vcf
+#read in the vcf file containing all filtered SNPs
 vcfR <- read.vcfR("~/Desktop/cali.zosterops.rad/filtered.snps.vcf.gz")
+#check out the details
 vcfR
-#bring in sample info
 #read in sample info csv
 sample.info<-read.csv("~/Desktop/cali.zosterops.rad/zosterops.trimmed.RAD.sampling.csv")
+#trim sampling info dataframe to retain only the samples that passed all filtering protocols
 sample.info<-sample.info[sample.info$ID %in% colnames(vcfR@gt),]
+#check how many samples per species are retained
 table(sample.info$Species)
 #see sample order
 colnames(vcfR@gt)
-#make sure sample info DF order matches order of samples in vcf
+#make sure sample info DF order matches order of samples in vcf (this should return all true if the dataframe sample order matches the order these samples occur in the vcf)
 sample.info$ID == colnames(vcfR@gt)[-1]
+#fix row names
 rownames(sample.info)<-c(1:nrow(sample.info))
 
-#remove the two putative hybrid samples from the vcf
+#remove the two putative hybrid samples from the vcf for this analysis
 v.sub<-vcfR[,c(1:46,48:51,53:125)]
 
-#subset sample info
+#subset sample info dataframe
 sample.info<-sample.info[c(1:45,47:50,52:124),]
 ```
 
-### convert vcfR to genlight and calc fst
+### convert vcfR to genlight and calculate fst
 ```{r}
-#convert
+#convert vcfR to genlight object
 gen<-vcfR2genlight(v.sub)
 
-#assign samples to the three groups shown above
+#assign samples to groups based on species identity
 gen@pop<-as.factor(sample.info$Species)
 #calculate pairwise Fst using the stampp package
 di.heat<-stamppFst(gen)
@@ -69,13 +72,17 @@ ggplot(data = heat, aes(x=X1, y=X2, fill=value)) +
   theme(axis.text.x = element_text(angle = 45, hjust = 1),
         axis.text.y = element_text(angle = 45, hjust = 1))
 
+#save the plot
 #ggsave("~/Desktop/cali.zosterops.rad/subset.heatmap.pdf", width = 4.5, height = 3, units= "in")
 ```
 
 ### try splitting up the three clades of japonicus to compare the intra to inter species FST's
 ```{r}
+#duplicate species column
 spec.assignments<-sample.info$Species
+#assign northern Philippines clade
 spec.assignments[c(50:54,59:64,87:93)]<-"north.phil"
+#assign southern Philippines clade
 spec.assignments[c(55:58,65:71,81:86,98,113,114)]<-"south.phil"
 #assign samples to the three groups shown above
 gen@pop<-as.factor(spec.assignments)
@@ -98,6 +105,7 @@ ggplot(data = heat, aes(x=X1, y=X2, fill=value)) +
   theme(axis.text.x = element_text(angle = 45, hjust = 1),
         axis.text.y = element_text(angle = 45, hjust = 1))
 
+#save plot
 #ggsave("~/Desktop/cali.zosterops.rad/fst.heatmap.pdf", width = 5, height = 3, units= "in")
 ```
 
@@ -106,12 +114,15 @@ ggplot(data = heat, aes(x=X1, y=X2, fill=value)) +
 #identify the number of fixed differences between pops
 #convert vcf to genotype matrix
 mat<-extract.gt(v.sub)
+#duplicate matrix
 conv.mat<-mat
+#convert genotypes to binary format (i.e., 0 = homozygous ref, 1 = het, 2 = homozygous alt)
 conv.mat[conv.mat == "0/0"]<-0
 conv.mat[conv.mat == "0/1"]<-1
 conv.mat[conv.mat == "1/1"]<-2
+#convert matrix to data.frame
 conv.mat<-as.data.frame(conv.mat)
-#convert to matrix numeric
+#convert to data.frame to numeric
 for (i in 1:ncol(conv.mat)){
   conv.mat[,i]<-as.numeric(as.character(conv.mat[,i]))
 }
@@ -176,7 +187,7 @@ ggplot(data = heat, aes(x=X1, y=X2, fill=value)) +
         axis.text.y = element_text(angle = 45, hjust = 1, size=12),
         axis.title.x = element_blank(), axis.title.y = element_blank())
 
-#ggsave
+#ggsave plot
 #ggsave("~/Desktop/cali.zosterops.rad/fst.heatmap.pdf", width = 5, height = 4, units= "in")
 ```
 
