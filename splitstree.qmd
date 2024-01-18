@@ -5,12 +5,13 @@ toc: true
 toc-title: Document Contents
 number-sections: true
 embed-resources: true
-bibliography: references.bib
 ---
 
 ## Read in filtered SNP data
 ```{r}
 #| output: false
+
+#load libraries
 library(vcfR) #v1.14.0
 library(ggplot2) #v3.4.1
 library(adegenet) #v2.1.10
