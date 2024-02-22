@@ -7,7 +7,7 @@
 
 ### Data availability
 *    All SNP datasets used in this manuscript can be found in the folder called [data](https://github.com/DevonDeRaad/zosterops.rad/tree/main/data).
-*    The raw sequence data for each sample passing filtering protocols (i.e., included in the analyses for this manuscript) is available via NCBI at the BioProject PRJNA1079333, which can be found at: [http://www.ncbi.nlm.nih.gov/bioproject/1079333](http://www.ncbi.nlm.nih.gov/bioproject/1079333).
+*    The raw sequence data for each sample passing filtering protocols (i.e., included in the analyses for this manuscript) is available via NCBI's Sequence Read Archive, at the BioProject PRJNA1079333, which can be found at: [http://www.ncbi.nlm.nih.gov/bioproject/1079333](http://www.ncbi.nlm.nih.gov/bioproject/1079333).
 
 ### Quality filtering raw, unfiltered SNPs
 *   The entire SNP filtering process, facilitated by the R packages [vcfR](https://doi.org/10.1111/1755-0998.12549) and [SNPfiltR](https://doi.org/10.1111/1755-0998.13618) is available to view here:
